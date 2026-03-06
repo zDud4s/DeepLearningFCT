@@ -1,0 +1,7 @@
+/CLAUDE.md
+/.idea/
+/Assignment1/data/
+
+/Assignment1/submissions/*
+!/Assignment1/submissions/.gitkeep
+
