@@ -25,7 +25,6 @@ from .evaluator import Evaluator
 from .preprocessing import FrameStacker
 
 
-
 # Utility functions
 def set_seed(seed: int) -> None:
     random.seed(seed)
@@ -99,8 +98,7 @@ class DQNTrainer2:
         self.train_minutes: float              = 0.0
         self.state_shape:  Optional[Tuple]     = None
 
-    
-    
+
     # Entry point
     def train(self) -> DQNAgent:
         cfg = self.cfg
@@ -204,8 +202,7 @@ class DQNTrainer2:
             n_episodes=n_episodes,
         )
 
-   
-    
+
     # Heuristic warm-start
     def _heuristic_warmup(self, env, n_episodes: int) -> int:
         cfg     = self.cfg
@@ -229,8 +226,6 @@ class DQNTrainer2:
                 total += 1
         return total
 
-
-    
     # Single episode
     def _run_episode(self, env, *, train: bool,
                      global_step: int = 0,
@@ -277,6 +272,7 @@ class DQNTrainer2:
             ep_return += float(reward)
             steps     += 1
 
+        explore_val = float(np.mean(explores)) if explores else 0.0
         return {
             "score":          float(getattr(env, "score", ep_return)),
             "return":         float(ep_return),
@@ -284,7 +280,8 @@ class DQNTrainer2:
             "steps":          int(steps),
             "loss":           float(np.mean(losses))   if losses   else float("nan"),
             "q_value":        float(np.mean(q_vals))   if q_vals   else float("nan"),
-            "explore_param":  float(np.mean(explores)) if explores else 0.0,
+            "explore_param":  explore_val,
+            "epsilon":        explore_val,
             "action_up_ratio": (float(np.mean([1 if a == 0 else 0 for a in actions]))
                                 if actions else float("nan")),
             "grad_steps":     int(agent.grad_steps),
