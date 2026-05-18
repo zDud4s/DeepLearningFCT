@@ -14,7 +14,7 @@ STARTING_KIT_DIR = ASSIGNMENT_DIR / "starting_kit"
 if str(STARTING_KIT_DIR) not in sys.path:
     sys.path.insert(0, str(STARTING_KIT_DIR))
 
-from starting_kit.space_race_env import SpaceRaceEnv
+from space_race_env import SpaceRaceEnv
 
 from .config import Config
 
