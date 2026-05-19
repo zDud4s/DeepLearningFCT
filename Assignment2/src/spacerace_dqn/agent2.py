@@ -25,10 +25,7 @@ from .network import SmallQNetwork
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-# ============================================================
 # Transition container
-# ============================================================
-
 class Transition(NamedTuple):
     state:      np.ndarray
     action:     int
@@ -37,10 +34,7 @@ class Transition(NamedTuple):
     done:       float   # stored as 0.0 / 1.0 for vectorised arithmetic
 
 
-# ============================================================
-# 2.1a  Uniform Replay Buffer
-# ============================================================
-
+# 2.1  Uniform Replay Buffer
 class ReplayBuffer:
     """Fixed-size circular (FIFO) buffer with uniform random sampling.
 
@@ -81,10 +75,7 @@ class ReplayBuffer:
         return f"ReplayBuffer(capacity={self.capacity}, size={len(self)})"
 
 
-# ============================================================
-# 2.1b  Prioritized Experience Replay  (optional enhancement)
-# ============================================================
-
+# 2.1  Prioritized Experience Replay
 class PrioritizedReplayBuffer:
     """Proportional PER (Schaul et al., 2016).
 
@@ -157,10 +148,8 @@ class PrioritizedReplayBuffer:
                 f"alpha={self.alpha}, size={len(self)})")
 
 
-# ============================================================
-# 2.2 / 2.3  DQN Agent
-# ============================================================
 
+# 2.2 / 2.3  DQN Agent
 class DQNAgent:
     """DQN with experience replay and a hard-updated target network.
 
