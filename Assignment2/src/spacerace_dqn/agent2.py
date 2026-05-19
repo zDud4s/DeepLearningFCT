@@ -165,34 +165,33 @@ class DQNAgent:
     """DQN with experience replay and a hard-updated target network.
 
     Design rationale
-    ----------------
-    **Replay buffer (§2.1 / §2.2)**
-        Transitions are stored in a ``ReplayBuffer`` (or
-        ``PrioritizedReplayBuffer``).  Each ``train_step`` draws a
-        mini-batch of ``batch_size`` transitions.  Benefits:
+    Replay buffer (2.1 / 2.2)
+        Transitions are stored in a ReplayBuffer (or
+        PrioritizedReplayBuffer).  Each train_step draws a
+        mini-batch of batch_size transitions.  Benefits:
           - Breaks temporal correlation between consecutive samples.
           - Each transition contributes to ~capacity/batch_size gradient
             updates (better sample efficiency than online 1-step updates).
           - Off-policy Q-learning can exploit replayed transitions
             regardless of which policy collected them.
 
-    **Target network (§2.3)**
-        A frozen copy of the online network (``self.target``) provides the
+    Target network (2.3)
+        A frozen copy of the online network (self.target) provides the
         bootstrapped Q-value in the TD target::
 
             target = r + gamma * (1 - done) * max_{a'} Q_target(s', a')
 
-        Weights are **hard-copied** from ``self.online`` every
-        ``target_update_freq`` gradient steps.  This removes the positive
+        Weights are hard-copied from self.online every
+        target_update_freq gradient steps.  This removes the positive
         feedback loop present in the basic DQN where both the prediction
         and the target shift after every weight update.
 
-    **Exploration**
-        - ``select_action(state, epsilon)``          — standard ε-greedy
-        - ``select_action_boltzmann(state, temp)``  — softmax over Q-values
+    Exploration
+        - select_action(state, epsilon)          — standard ε-greedy
+        - select_action_boltzmann(state, temp)  — softmax over Q-values
 
-    The public API is identical to BasicDQNAgent so ``Evaluator`` and
-    ``SubmissionPackager`` require no changes.
+    The public API is identical to BasicDQNAgent so Evaluator and
+    SubmissionPackager require no changes.
     """
 
     def __init__(
@@ -246,10 +245,8 @@ class DQNAgent:
         self.grad_steps = 0
         self.env_steps  = 0
 
-    # ------------------------------------------------------------------
-    # Target network helpers
-    # ------------------------------------------------------------------
 
+    # Target network helpers
     def _hard_update_target(self) -> None:
         """Copy all online weights into target (§2.3 hard update)."""
         self.target.load_state_dict(self.online.state_dict())
@@ -262,17 +259,13 @@ class DQNAgent:
         for t_p, o_p in zip(self.target.parameters(), self.online.parameters()):
             t_p.data.copy_(tau * o_p.data + (1.0 - tau) * t_p.data)
 
-    # ------------------------------------------------------------------
-    # Tensor helper
-    # ------------------------------------------------------------------
 
+    # Tensor helper
     def _t(self, x: np.ndarray) -> torch.Tensor:
         return torch.as_tensor(x, dtype=torch.float32, device=self.device)
 
-    # ------------------------------------------------------------------
-    # Action selection
-    # ------------------------------------------------------------------
 
+    # Action selection
     def select_action(self, state: np.ndarray, epsilon: float = 0.0) -> int:
         """ε-greedy: uniform random with prob ε, otherwise argmax Q."""
         if random.random() < epsilon:
@@ -302,10 +295,8 @@ class DQNAgent:
         with torch.no_grad():
             return float(self.online(self._t(state).unsqueeze(0)).max().item())
 
-    # ------------------------------------------------------------------
-    # Buffer interaction
-    # ------------------------------------------------------------------
 
+    # Buffer interaction
     def push(self, state, action, reward, next_state, done) -> None:
         """Store one transition.  Alias: .add() for assignment compatibility."""
         self.buffer.add(state, action, reward, next_state, done)
@@ -313,10 +304,7 @@ class DQNAgent:
 
     add = push
 
-    # ------------------------------------------------------------------
-    # Training step  (§2.2 + §2.3)
-    # ------------------------------------------------------------------
-
+    # Training step  (2.2 + 2.3)
     def train_step(self, state=None, action=None, reward=None,
                    next_state=None, done=None) -> Dict[str, float]:
         """Draw a mini-batch and take one gradient step.
@@ -378,10 +366,8 @@ class DQNAgent:
             "td_error": float(np.abs(td_errors).mean()),
         }
 
-    # ------------------------------------------------------------------
-    # Checkpoint
-    # ------------------------------------------------------------------
 
+    # Checkpoint
     def save(self, path: Path, *, cfg=None, extras: dict | None = None) -> Path:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)

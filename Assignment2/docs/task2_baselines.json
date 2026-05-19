@@ -3,12 +3,12 @@
     "policy": "random",
     "difficulty": 0,
     "episodes": 10,
-    "mean_score": 0.1,
-    "std_score": 0.30000000000000004,
+    "mean_score": 0.0,
+    "std_score": 0.0,
     "min_score": 0.0,
-    "max_score": 1.0,
-    "mean_return": -1.8469999999999966,
-    "mean_collisions": 17.1,
+    "max_score": 0.0,
+    "mean_return": -2.1959999999999966,
+    "mean_collisions": 17.8,
     "mean_steps": 600.0,
     "scores": [
       0.0,
@@ -19,7 +19,7 @@
       0.0,
       0.0,
       0.0,
-      1.0,
+      0.0,
       0.0
     ]
   },

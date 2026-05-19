@@ -56,19 +56,19 @@ class Config2:
     learning_rate:             float = 1e-4
     grad_clip_norm:            float = 10.0
 
-    # --- replay buffer (§2.1) ---
+    # --- replay buffer (2.1) ---
     buffer_capacity:           int   = 10_000   # must be <= 10 000 per spec
     batch_size:                int   = 64
     warmup_steps:              int   = 1_000    # fill buffer this far before training
     use_per:                   bool  = False    # True -> PrioritizedReplayBuffer
     per_alpha:                 float = 0.6
 
-    # --- target network (§2.3) ---
-    target_update_freq:        int   = 800      # gradient steps between hard copies
+    # --- target network (2.3) ---
+    target_update_freq:        int   = 100      # gradient steps between hard copies
 
     # --- training schedule ---
-    episodes:                  int   = 200
-    eval_every:                int   = 10
+    episodes:                  int   = 800
+    eval_every:                int   = 20
     eval_episodes:             int   = 10
     baseline_episodes:         int   = 10
     base_eval_seed:            int   = 2026
@@ -78,16 +78,16 @@ class Config2:
 
     # ε-greedy
     epsilon_start:             float = 1.0
-    epsilon_end:               float = 0.05
-    epsilon_decay_steps:       int   = 80_000
+    epsilon_end:               float = 0.01
+    epsilon_decay_steps:       int   = 150_000
 
     # Boltzmann
     temperature_start:         float = 5.0
-    temperature_end:           float = 0.2
-    temperature_decay_steps:   int   = 80_000
+    temperature_end:           float = 0.1
+    temperature_decay_steps:   int   = 150_000
 
     # --- heuristic warm-start ---
-    heuristic_warmup_episodes: int   = 10
+    heuristic_warmup_episodes: int   = 20
 
     # --- output ---
     submission_name:           str   = "task2_enhanced_dqn"
