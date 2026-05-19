@@ -27,7 +27,7 @@
   "epsilon_decay_steps": 40000,
   "temperature_start": 5.0,
   "temperature_end": 0.2,
-  "temperature_decay_steps": 40000,
+  "temperature_decay_steps": 80000,
   "heuristic_warmup_episodes": 10,
   "submission_name": "task2_epsilon",
   "checkpoint_name": "task2_epsilon.pt"

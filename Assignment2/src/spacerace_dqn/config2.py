@@ -64,10 +64,10 @@ class Config2:
     per_alpha:                 float = 0.6
 
     # --- target network (§2.3) ---
-    target_update_freq:        int   = 500      # gradient steps between hard copies
+    target_update_freq:        int   = 800      # gradient steps between hard copies
 
     # --- training schedule ---
-    episodes:                  int   = 150
+    episodes:                  int   = 200
     eval_every:                int   = 10
     eval_episodes:             int   = 10
     baseline_episodes:         int   = 10
@@ -79,12 +79,12 @@ class Config2:
     # ε-greedy
     epsilon_start:             float = 1.0
     epsilon_end:               float = 0.05
-    epsilon_decay_steps:       int   = 40_000
+    epsilon_decay_steps:       int   = 80_000
 
     # Boltzmann
     temperature_start:         float = 5.0
     temperature_end:           float = 0.2
-    temperature_decay_steps:   int   = 40_000
+    temperature_decay_steps:   int   = 80_000
 
     # --- heuristic warm-start ---
     heuristic_warmup_episodes: int   = 10

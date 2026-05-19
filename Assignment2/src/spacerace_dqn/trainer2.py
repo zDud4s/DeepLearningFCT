@@ -336,8 +336,17 @@ class DQNTrainer2:
                 return inner.agent.select_action(s, epsilon=0.0)
 
         policy = _GreedyPolicy(self.agent, cfg.frame_stack)
+        
+        # Randomize the evaluation seed to prevent memorization
+        original_seed = evaluator.cfg.base_eval_seed
+        evaluator.cfg.base_eval_seed = random.randint(5000, 9999) 
+        
         result = evaluator.run(policy, difficulty=difficulty,
                                n_episodes=n_ep, include_semantic_info=False)
+        
+        # Restore the original seed just in case
+        evaluator.cfg.base_eval_seed = original_seed
+        
         result["mean_max_q"] = self._sample_mean_max_q(difficulty=difficulty)
         return result
 
