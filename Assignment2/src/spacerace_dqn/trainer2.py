@@ -1,9 +1,18 @@
 """Task 2 trainer — replay buffer + target network + two exploration modes +
 heuristic warm-start.
 
-Public interface mirrors DQNTrainer so the rest of the package and the
-SubmissionPackager can be reused without changes:
+Critical correctness requirement
+---------------------------------
+The training environment MUST use ``include_semantic_info=False`` so the agent
+learns purely from RGB observations — exactly what it will receive on Codabench.
 
+The heuristic warm-start is the one exception: it creates a *separate* env
+with ``include_semantic_info=True`` so the heuristic policy can read
+``info["semantic_obs"]``.  However, the transitions pushed into the replay
+buffer use the RGB ``obs`` (not the semantic obs), so there is no mismatch
+between training and inference.
+
+Public interface mirrors DQNTrainer:
     trainer = DQNTrainer2(cfg)
     agent   = trainer.train()
     final   = trainer.final_eval()
@@ -25,6 +34,7 @@ from .evaluator import Evaluator
 from .preprocessing import FrameStacker
 
 
+
 # Utility functions
 def set_seed(seed: int) -> None:
     random.seed(seed)
@@ -35,13 +45,11 @@ def set_seed(seed: int) -> None:
 
 
 def epsilon_by_step(step: int, cfg: Config2) -> float:
-    """Linear ε decay."""
     frac = min(1.0, step / max(1, cfg.epsilon_decay_steps))
     return cfg.epsilon_start + frac * (cfg.epsilon_end - cfg.epsilon_start)
 
 
 def temperature_by_step(step: int, cfg: Config2) -> float:
-    """Linear temperature decay for Boltzmann exploration."""
     frac = min(1.0, step / max(1, cfg.temperature_decay_steps))
     return cfg.temperature_start + frac * (cfg.temperature_end - cfg.temperature_start)
 
@@ -54,31 +62,27 @@ def safe_rate(value: float, elapsed_minutes: float) -> float:
 
 def _best_heuristic_policy():
     """Return the best available heuristic, with graceful fallback."""
-    try:
-        from .improved_heuristics import HeuristicV26MirrorEnv
-        return HeuristicV26MirrorEnv(k=4)
-    except (ImportError, AttributeError):
-        pass
-    try:
-        from .improved_heuristics import HeuristicV18FullTreeS3
-        return HeuristicV18FullTreeS3()
-    except (ImportError, AttributeError):
-        pass
-    try:
-        from .improved_heuristics import HeuristicV15FullTree
-        return HeuristicV15FullTree()
-    except (ImportError, AttributeError):
-        pass
-    from .policies import RGBHeuristicPolicy
-    return RGBHeuristicPolicy()
+    for cls_name in ("HeuristicV26MirrorEnv", "HeuristicV18FullTreeS3",
+                     "HeuristicV15FullTree"):
+        try:
+            from . import improved_heuristics as ih
+            cls = getattr(ih, cls_name)
+            try:
+                return cls(k=4)
+            except TypeError:
+                return cls()
+        except (ImportError, AttributeError):
+            continue
+    from .policies import SemanticHeuristicPolicy
+    return SemanticHeuristicPolicy()
 
 
 
 # Main trainer
 class DQNTrainer2:
-    """End-to-end training loop for the enhanced DQN (Task 2).
+    """End-to-end training loop for the Task 2 enhanced DQN.
 
-    Attribute layout mirrors DQNTrainer:
+    Attributes mirror DQNTrainer:
         .agent          — trained DQNAgent
         .history        — list of per-episode metric dicts
         .eval_history   — list of per-eval metric dicts (incl. mean_max_q)
@@ -104,7 +108,8 @@ class DQNTrainer2:
         cfg = self.cfg
         set_seed(cfg.seed)
 
-        env = make_env(cfg, include_semantic_info=cfg.include_semantic_info)
+        # IMPORTANT: training env never has semantic info — matches Codabench
+        env = make_env(cfg, include_semantic_info=False)
         sample_obs, _ = reset_env(env, seed=cfg.seed)
         self.state_shape = tuple(FrameStacker(cfg.frame_stack).reset(sample_obs).shape)
 
@@ -125,24 +130,27 @@ class DQNTrainer2:
         )
 
         if self.verbose:
-            params = sum(p.numel() for p in self.agent.online.parameters())
-            buf_type = ("PER" if cfg.use_per else "Uniform")
+            params   = sum(p.numel() for p in self.agent.online.parameters())
+            buf_type = "PER" if cfg.use_per else "Uniform"
             print(
                 f"[DQNTrainer2]  device={self.device}  "
                 f"state={self.state_shape}  params={params:,}\n"
                 f"  buffer={buf_type} cap={cfg.buffer_capacity:,}  "
                 f"batch={cfg.batch_size}  warmup={cfg.warmup_steps:,}  "
                 f"target_update={cfg.target_update_freq}  "
-                f"exploration={cfg.exploration}"
+                f"exploration={cfg.exploration}  "
+                f"semantic_info=False (Codabench-safe)"
             )
 
         start       = time.time()
         evaluator   = Evaluator(cfg)
         global_step = 0
 
-        # Phase 0 — heuristic warm-start (fills buffer with good transitions)
+        # Phase 0 — heuristic warm-start
+        # Uses a separate env WITH semantic info so the heuristic can read
+        # info["semantic_obs"], but pushes RGB observations into the buffer.
         if cfg.heuristic_warmup_episodes > 0:
-            global_step = self._heuristic_warmup(env, cfg.heuristic_warmup_episodes)
+            global_step = self._heuristic_warmup(cfg.heuristic_warmup_episodes)
             elapsed = (time.time() - start) / 60.0
             if self.verbose:
                 print(
@@ -151,7 +159,7 @@ class DQNTrainer2:
                     f"({elapsed:.1f} min)"
                 )
 
-        # Phase 1 — main training loop
+        # Phase 1 — main training loop (RGB only)
         for episode in range(1, cfg.episodes + 1):
             result, global_step = self._run_episode(
                 env, train=True, global_step=global_step,
@@ -204,31 +212,41 @@ class DQNTrainer2:
 
 
     # Heuristic warm-start
-    def _heuristic_warmup(self, env, n_episodes: int) -> int:
-        cfg     = self.cfg
+    def _heuristic_warmup(self, n_episodes: int) -> int:
+        """Fill replay buffer with heuristic experience.
+
+        Uses a dedicated env with include_semantic_info=True so the heuristic
+        can use info["semantic_obs"].  The RGB obs (not the semantic obs) is
+        stored in the buffer — same format the DQN will learn from.
+        """
+        cfg = self.cfg
+        # Semantic env for the heuristic to read
+        sem_env = make_env(cfg, include_semantic_info=True)
         policy  = _best_heuristic_policy()
         stacker = FrameStacker(cfg.frame_stack)
         total   = 0
+
         for ep in range(n_episodes):
-            obs, info = reset_env(env, seed=cfg.seed + ep)
+            obs, info = reset_env(sem_env, seed=cfg.seed + ep)
             policy.reset()
             state = stacker.reset(obs)
             done  = False
             steps = 0
             while not done and steps < cfg.max_steps_per_episode:
-                action = policy.select_action(obs, info, env.action_space)
-                next_obs, reward, terminated, truncated, info = env.step(int(action))
+                action = policy.select_action(obs, info, sem_env.action_space)
+                next_obs, reward, terminated, truncated, info = sem_env.step(int(action))
                 done       = bool(terminated or truncated)
                 next_state = stacker.append(next_obs)
                 self.agent.push(state, action, reward, next_state, done)
                 obs, state = next_obs, next_state
                 steps += 1
                 total += 1
+
+        sem_env.close()
         return total
 
 
-
-    # Single episode
+    # Single episode (RGB only)
     def _run_episode(self, env, *, train: bool,
                      global_step: int = 0,
                      seed: Optional[int] = None) -> Tuple[Dict, int]:
@@ -248,7 +266,7 @@ class DQNTrainer2:
                 if cfg.exploration == "boltzmann":
                     temp   = temperature_by_step(global_step, cfg)
                     action = agent.select_action_boltzmann(state, temperature=temp)
-                    ep    = temp
+                    ep     = temp
                 else:
                     ep     = epsilon_by_step(global_step, cfg)
                     action = agent.select_action(state, epsilon=ep)

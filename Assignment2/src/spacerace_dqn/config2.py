@@ -19,20 +19,31 @@ class Config2:
     exploration = "boltzmann":
         Softmax over Q-values with temperature T decaying linearly from
         temperature_start to temperature_end.
-    --------------------
-    
+        
+    ----------------------------------
+
     Heuristic warm-start:
     heuristic_warmup_episodes > 0:
         Play that many episodes with the best available heuristic policy
         and push transitions into the replay buffer before gradient descent
         begins.  Set to 0 to disable.
+            
+    ----------------------------------
+
+    IMPORTANT — include_semantic_info:
+    Must be False so the training environment matches Codabench evaluation
+    conditions exactly.  The agent's select_action(obs) receives only the
+    RGB frame, just as it will on the leaderboard.  The heuristic warm-start
+    uses a separate env with semantic info enabled only for the heuristic
+    policy itself — the transitions pushed into the replay buffer still use
+    RGB observations so there is no mismatch.
     """
 
     # --- reproducibility ---
     seed:                      int   = 7
     difficulty:                int   = 0
     obs_mode:                  str   = "rgb"
-    include_semantic_info:     bool  = True
+    include_semantic_info:     bool  = False   # MUST be False — matches Codabench
     round_time_seconds:        int   = 60
     ticks_per_second:          int   = 10
     max_steps_per_episode:     int   = 600
@@ -49,7 +60,7 @@ class Config2:
     buffer_capacity:           int   = 10_000   # must be <= 10 000 per spec
     batch_size:                int   = 64
     warmup_steps:              int   = 1_000    # fill buffer this far before training
-    use_per:                   bool  = False    # True → PrioritizedReplayBuffer
+    use_per:                   bool  = False    # True -> PrioritizedReplayBuffer
     per_alpha:                 float = 0.6
 
     # --- target network (§2.3) ---

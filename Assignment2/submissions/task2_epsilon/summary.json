@@ -3,7 +3,7 @@
     "seed": 7,
     "difficulty": 0,
     "obs_mode": "rgb",
-    "include_semantic_info": true,
+    "include_semantic_info": false,
     "round_time_seconds": 60,
     "ticks_per_second": 10,
     "max_steps_per_episode": 600,
@@ -33,31 +33,31 @@
     "submission_name": "task2_epsilon",
     "checkpoint_name": "task2_epsilon.pt"
   },
-  "train_minutes": 17.51124384800593,
+  "train_minutes": 58.27431617577871,
   "final_eval": {
     "policy": "dqn2_greedy_inproc",
     "difficulty": 0,
     "episodes": 10,
-    "mean_score": 28.0,
+    "mean_score": 29.0,
     "std_score": 0.0,
-    "min_score": 28.0,
-    "max_score": 28.0,
-    "mean_return": 37.93000000000005,
-    "mean_collisions": 1.0,
+    "min_score": 29.0,
+    "max_score": 29.0,
+    "mean_return": 39.3400000000001,
+    "mean_collisions": 0.0,
     "mean_steps": 600.0,
     "scores": [
-      28.0,
-      28.0,
-      28.0,
-      28.0,
-      28.0,
-      28.0,
-      28.0,
-      28.0,
-      28.0,
-      28.0
+      29.0,
+      29.0,
+      29.0,
+      29.0,
+      29.0,
+      29.0,
+      29.0,
+      29.0,
+      29.0,
+      29.0
     ],
-    "mean_max_q": 6.058320434888204
+    "mean_max_q": 6.348578492800395
   },
   "baselines": [
     {
@@ -68,8 +68,8 @@
       "std_score": 0.0,
       "min_score": 0.0,
       "max_score": 0.0,
-      "mean_return": -2.253999999999995,
-      "mean_collisions": 18.0,
+      "mean_return": -2.0889999999999964,
+      "mean_collisions": 17.4,
       "mean_steps": 600.0,
       "scores": [
         0.0,
