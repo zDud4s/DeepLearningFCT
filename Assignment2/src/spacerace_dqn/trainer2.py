@@ -35,7 +35,7 @@ def set_seed(seed: int) -> None:
 
 
 def epsilon_by_step(step: int, cfg: Config2) -> float:
-    """Linear and decay."""
+    """Linear ε decay."""
     frac = min(1.0, step / max(1, cfg.epsilon_decay_steps))
     return cfg.epsilon_start + frac * (cfg.epsilon_end - cfg.epsilon_start)
 
@@ -225,6 +225,8 @@ class DQNTrainer2:
                 steps += 1
                 total += 1
         return total
+
+
 
     # Single episode
     def _run_episode(self, env, *, train: bool,
