@@ -7,8 +7,8 @@
     "std_score": 0.0,
     "min_score": 0.0,
     "max_score": 0.0,
-    "mean_return": -2.1959999999999966,
-    "mean_collisions": 17.8,
+    "mean_return": -2.043999999999996,
+    "mean_collisions": 17.6,
     "mean_steps": 600.0,
     "scores": [
       0.0,

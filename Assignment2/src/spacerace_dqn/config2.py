@@ -41,7 +41,7 @@ class Config2:
 
     # --- reproducibility ---
     seed:                      int   = 7
-    difficulty:                int   = 0
+    difficulty:                int   = 2
     obs_mode:                  str   = "rgb"
     include_semantic_info:     bool  = False   # MUST be False — matches Codabench
     round_time_seconds:        int   = 60
