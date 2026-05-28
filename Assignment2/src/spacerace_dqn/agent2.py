@@ -32,6 +32,7 @@ class Transition(NamedTuple):
     reward:     float
     next_state: np.ndarray
     done:       float   # stored as 0.0 / 1.0 for vectorised arithmetic
+    is_demo:    float = 0.0   # 1.0 if action came from the heuristic teacher (h18) — used for BC distillation loss
 
 
 # 2.1  Uniform Replay Buffer
@@ -52,14 +53,20 @@ class ReplayBuffer:
         self._rng = random.Random(seed)
 
     def add(self, state: np.ndarray, action: int, reward: float,
-            next_state: np.ndarray, done: bool) -> None:
-        """Store one transition (matches assignment base-class method name)."""
+            next_state: np.ndarray, done: bool, is_demo: bool = False) -> None:
+        """Store one transition (matches assignment base-class method name).
+
+        ``is_demo=True`` marks transitions whose action came from the
+        h18 heuristic teacher (e.g. during the warm-start phase). Used by
+        the optional Behavioral Cloning loss in ``DQNAgent.train_step``.
+        """
         self._buf.append(Transition(
             state=state,
             action=int(action),
             reward=float(reward),
             next_state=next_state,
             done=float(done),
+            is_demo=float(bool(is_demo)),
         ))
 
     push = add   # alias so DQNAgent can call .push() as well
@@ -105,8 +112,9 @@ class PrioritizedReplayBuffer:
         self._rng = np.random.default_rng(seed)
 
     def add(self, state, action, reward, next_state, done,
-            priority: Optional[float] = None) -> None:
-        t = Transition(state, int(action), float(reward), next_state, float(done))
+            priority: Optional[float] = None, is_demo: bool = False) -> None:
+        t = Transition(state, int(action), float(reward), next_state, float(done),
+                       float(bool(is_demo)))
         p = float(priority) if priority is not None else self.default_priority
         if len(self._buf) < self.capacity:
             self._buf.append(t)
@@ -197,7 +205,13 @@ class DQNAgent:
         use_per:            bool  = False,
         per_alpha:          float = 0.6,
         # target network
+        target_update_mode: str   = "hard",   # "hard" | "soft"
         target_update_freq: int   = 500,
+        soft_tau:           float = 0.01,
+        use_double_dqn:     bool  = False,
+        # behavioral cloning (distillation from the heuristic teacher)
+        bc_weight:          float = 0.0,      # 0 disables; ~0.5 is a strong distillation signal
+        bc_temperature:     float = 1.0,      # softens the policy used in BC cross-entropy
         warmup_steps:       int   = 1_000,
         # misc
         device:             torch.device = DEVICE,
@@ -209,7 +223,15 @@ class DQNAgent:
         self.gamma              = float(gamma)
         self.grad_clip_norm     = float(grad_clip_norm)
         self.batch_size         = int(batch_size)
+        mode = str(target_update_mode).lower()
+        if mode not in ("hard", "soft"):
+            raise ValueError(f"target_update_mode must be 'hard' or 'soft', got {target_update_mode!r}")
+        self.target_update_mode = mode
         self.target_update_freq = int(target_update_freq)
+        self.soft_tau           = float(soft_tau)
+        self.use_double_dqn     = bool(use_double_dqn)
+        self.bc_weight          = float(bc_weight)
+        self.bc_temperature     = max(float(bc_temperature), 1e-6)
         self.warmup_steps       = int(warmup_steps)
         self.use_per            = bool(use_per)
         self.device             = device
@@ -285,10 +307,15 @@ class DQNAgent:
             return float(self.online(self._t(state).unsqueeze(0)).max().item())
 
 
-    # Buffer interaction
-    def push(self, state, action, reward, next_state, done) -> None:
-        """Store one transition.  Alias: .add() for assignment compatibility."""
-        self.buffer.add(state, action, reward, next_state, done)
+    def push(self, state, action, reward, next_state, done,
+             is_demo: bool = False) -> None:
+        """Store one transition.  Alias: .add() for assignment compatibility.
+
+        ``is_demo=True`` marks transitions whose action came from the
+        heuristic teacher (h18). Used by the optional Behavioral Cloning
+        loss in train_step.
+        """
+        self.buffer.add(state, action, reward, next_state, done, is_demo=is_demo)
         self.env_steps += 1
 
     add = push
@@ -323,16 +350,38 @@ class DQNAgent:
                                    dtype=torch.float32, device=self.device)
         dones       = torch.tensor([t.done   for t in batch],
                                    dtype=torch.float32, device=self.device)
+        is_demo     = torch.tensor([getattr(t, "is_demo", 0.0) for t in batch],
+                                   dtype=torch.float32, device=self.device)
 
         # --- Q(s, a) from online network ---
-        q_sa = self.online(states).gather(1, actions.unsqueeze(1)).squeeze(1)
+        q_all = self.online(states)              # (B, n_actions) — kept for BC loss
+        q_sa  = q_all.gather(1, actions.unsqueeze(1)).squeeze(1)
 
         # --- TD target from frozen target network (§2.3) ---
+        # Double DQN: action selected by ONLINE net, value evaluated by TARGET net
+        # (Hasselt et al., 2016) — decouples the max-bias from the target estimate.
         with torch.no_grad():
-            next_q = self.target(next_states).max(dim=1).values
+            if self.use_double_dqn:
+                next_a = self.online(next_states).argmax(dim=1)
+                next_q = self.target(next_states).gather(1, next_a.unsqueeze(1)).squeeze(1)
+            else:
+                next_q = self.target(next_states).max(dim=1).values
             td_tgt = rewards + self.gamma * (1.0 - dones) * next_q
 
-        loss = F.mse_loss(q_sa, td_tgt)
+        # --- Q-learning loss (Bellman MSE) ---
+        q_loss = F.mse_loss(q_sa, td_tgt)
+
+        # --- Behavioral Cloning loss on demo transitions (h18 teacher) ---
+        # Only computed if bc_weight > 0 and at least one demo is in the batch.
+        # CE between softmax(Q/T_bc) and the teacher's one-hot action.
+        bc_loss = torch.zeros((), device=self.device)
+        n_demos = float(is_demo.sum().item())
+        if self.bc_weight > 0.0 and n_demos > 0.0:
+            log_pi = F.log_softmax(q_all / self.bc_temperature, dim=1)
+            ce = F.nll_loss(log_pi, actions, reduction="none")
+            bc_loss = (ce * is_demo).sum() / max(n_demos, 1.0)
+
+        loss = q_loss + self.bc_weight * bc_loss
 
         self.optimizer.zero_grad(set_to_none=True)
         loss.backward()
@@ -343,13 +392,18 @@ class DQNAgent:
         if self.use_per and per_idx is not None:
             self.buffer.update_priorities(per_idx, td_errors)
 
-        # --- hard-copy target every N gradient steps ---
+        # --- target network update (§2.3) ---
+        # hard: copy every N grad steps   |   soft: Polyak average every step
         self.grad_steps += 1
-        if self.grad_steps % self.target_update_freq == 0:
+        if self.target_update_mode == "soft":
+            self._soft_update_target(tau=self.soft_tau)
+        elif self.grad_steps % self.target_update_freq == 0:
             self._hard_update_target()
 
         return {
             "loss":     float(loss.detach().item()),
+            "q_loss":   float(q_loss.detach().item()),
+            "bc_loss":  float(bc_loss.detach().item()) if isinstance(bc_loss, torch.Tensor) else float(bc_loss),
             "q_value":  float(q_sa.detach().mean().item()),
             "target":   float(td_tgt.detach().mean().item()),
             "td_error": float(np.abs(td_errors).mean()),

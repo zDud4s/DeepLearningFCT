@@ -31,12 +31,12 @@ class Config2:
     ----------------------------------
 
     IMPORTANT — include_semantic_info:
-    Must be False so the training environment matches Codabench evaluation
-    conditions exactly.  The agent's select_action(obs) receives only the
-    RGB frame, just as it will on the leaderboard.  The heuristic warm-start
-    uses a separate env with semantic info enabled only for the heuristic
-    policy itself — the transitions pushed into the replay buffer still use
-    RGB observations so there is no mismatch.
+    Must be False everywhere in training (main loop AND heuristic warm-start)
+    so the agent — and any policy that contributes data to the replay buffer
+    — sees only the RGB frame, exactly as on Codabench. The professor
+    explicitly forbids using info["semantic_obs"] to guide training in any
+    form, so the warm-start heuristic also decodes the grid from RGB
+    (extract_rgb_grid) rather than from semantic info.
     """
 
     # --- reproducibility ---
@@ -63,8 +63,17 @@ class Config2:
     use_per:                   bool  = False    # True -> PrioritizedReplayBuffer
     per_alpha:                 float = 0.6
 
-    # --- target network (2.3) ---
-    target_update_freq:        int   = 100      # gradient steps between hard copies
+    # --- target network (§2.3) ---
+    target_update_mode:        str   = "hard"   # "hard" | "soft"
+    target_update_freq:        int   = 800      # gradient steps between hard copies
+    soft_tau:                  float = 0.01     # Polyak rate when mode == "soft"
+
+    # --- Double DQN ---
+    use_double_dqn:            bool  = False    # decouple action selection (online) from value (target)
+
+    # --- Behavioral Cloning (distillation from the h18 heuristic teacher) ---
+    bc_weight:                 float = 0.0      # 0 disables; ~0.3-0.5 is a strong distillation signal
+    bc_temperature:            float = 1.0      # softens the Q-derived policy used in BC cross-entropy
 
     # --- training schedule ---
     episodes:                  int   = 800
@@ -75,6 +84,7 @@ class Config2:
 
     # --- exploration ---
     exploration:               str   = "epsilon"   # "epsilon" | "boltzmann"
+    decay_schedule:            str   = "linear"    # "linear" | "exponential"
 
     # ε-greedy
     epsilon_start:             float = 1.0
