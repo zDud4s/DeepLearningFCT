@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 
 # Imports everything from agent2 to avoid rewriting the replay buffer
-from .agent2 import DQNAgent as DQNAgent2, Transition, ReplayBuffer
+from .agent2 import DQNAgent as DQNAgent2, Transition, ReplayBuffer, DEVICE
 
 class DQNAgent3(DQNAgent2):
     """Task 3 Agent - Inherits from Task 2 but adds proper Boltzmann sampling."""
